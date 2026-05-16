@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digest Diff Report</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; color: #24292f; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+  .refs { font-family: ui-monospace, monospace; font-size: 0.82rem; color: #57606a; margin-bottom: 2rem; line-height: 1.8; }
+  .refs span { display: block; }
+  h2 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+  h2.changed { color: #9a6700; }
+  h2.added   { color: #1a7f37; }
+  h2.removed { color: #cf222e; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.45rem 0.75rem; border-bottom: 1px solid #d0d7de; }
+  th { background: #f6f8fa; font-weight: 600; }
+  .empty { color: #57606a; font-style: italic; margin-top: 2rem; }
+  .summary { display: flex; gap: 1.5rem; margin-bottom: 2rem; }
+  .stat { text-align: center; }
+  .stat .n { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+  .stat .l { font-size: 0.8rem; color: #57606a; }
+  .n-changed { color: #9a6700; }
+  .n-added   { color: #1a7f37; }
+  .n-removed { color: #cf222e; }
+  .n-none    { color: #57606a; }
+</style>
+</head>
+<body>
+<h1>Container Digest Diff</h1>
+<div class="refs">
+  <span><strong>Old:</strong> {{.OldRef}}</span>
+  <span><strong>New:</strong> {{.NewRef}}</span>
+</div>
+
+{{$noChanges := and (eq (len .Result.Added) 0) (eq (len .Result.Removed) 0) (eq (len .Result.Changed) 0)}}
+
+<div class="summary">
+  <div class="stat"><div class="n {{if .Result.Changed}}n-changed{{else}}n-none{{end}}">{{len .Result.Changed}}</div><div class="l">changed</div></div>
+  <div class="stat"><div class="n {{if .Result.Added}}n-added{{else}}n-none{{end}}">{{len .Result.Added}}</div><div class="l">added</div></div>
+  <div class="stat"><div class="n {{if .Result.Removed}}n-removed{{else}}n-none{{end}}">{{len .Result.Removed}}</div><div class="l">removed</div></div>
+</div>
+
+{{if $noChanges}}
+<p class="empty">No package differences found between the two digests.</p>
+{{end}}
+
+{{if .Result.Changed}}
+<h2 class="changed">Changed ({{len .Result.Changed}})</h2>
+<table>
+  <thead><tr><th>Package</th><th>Type</th><th>Old Version</th><th>New Version</th></tr></thead>
+  <tbody>
+  {{range .Result.Changed}}
+  <tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.OldVersion}}</td><td>{{.NewVersion}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{if .Result.Added}}
+<h2 class="added">Added ({{len .Result.Added}})</h2>
+<table>
+  <thead><tr><th>Package</th><th>Type</th><th>Version</th></tr></thead>
+  <tbody>
+  {{range .Result.Added}}
+  <tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.Version}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{if .Result.Removed}}
+<h2 class="removed">Removed ({{len .Result.Removed}})</h2>
+<table>
+  <thead><tr><th>Package</th><th>Type</th><th>Version</th></tr></thead>
+  <tbody>
+  {{range .Result.Removed}}
+  <tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.Version}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+</body>
+</html>

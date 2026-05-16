@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: digest-diff
+  labels:
+    app: digest-diff
+spec:
+  selector:
+    app: digest-diff
+  ports:
+    - port: 80
+      targetPort: http
+      name: http
+  type: ClusterIP

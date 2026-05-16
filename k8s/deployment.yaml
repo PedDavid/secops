@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: digest-diff
+  labels:
+    app: digest-diff
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: digest-diff
+  template:
+    metadata:
+      labels:
+        app: digest-diff
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 65534
+      containers:
+        - name: digest-diff
+          image: digest-diff:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: CACHE_DIR
+              value: /var/cache/digest-diff
+            - name: PORT
+              value: "8080"
+          volumeMounts:
+            - name: cache
+              mountPath: /var/cache/digest-diff
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "2"
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: digest-diff-cache
