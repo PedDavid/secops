@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -98,6 +99,26 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	renderHTML(w, oldRef, newRef, result)
 }
 
+func (s *Server) handleDiffJSON(w http.ResponseWriter, r *http.Request) {
+	oldRef := r.URL.Query().Get("old")
+	newRef := r.URL.Query().Get("new")
+	if oldRef == "" || newRef == "" {
+		http.Error(w, "old and new query params are required", http.StatusBadRequest)
+		return
+	}
+
+	key := cacheKey(oldRef, newRef)
+	result, err := s.getOrCompute(key, oldRef, newRef)
+	if err != nil {
+		slog.Error("diff failed", "old", oldRef, "new", newRef, "err", err)
+		http.Error(w, "diff computation failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
 func (s *Server) handleBadge(w http.ResponseWriter, r *http.Request) {
 	oldRef := r.URL.Query().Get("old")
 	newRef := r.URL.Query().Get("new")
@@ -169,6 +190,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /diff", srv.handleDiff)
+	mux.HandleFunc("GET /diff.json", srv.handleDiffJSON)
 	mux.HandleFunc("GET /badge", srv.handleBadge)
 	mux.HandleFunc("GET /pregenerate", srv.handlePregenerate)
 	mux.HandleFunc("GET /healthz", handleHealth)
