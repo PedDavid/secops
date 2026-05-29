@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
 )
@@ -128,47 +129,49 @@ func (s *Server) handleBadge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", "no-cache")
 
 	key := cacheKey(oldRef, newRef)
-	result, err := s.getOrCompute(key, oldRef, newRef)
+	result, err := s.cache.Get(key)
 	if err != nil {
-		slog.Error("diff failed for badge", "old", oldRef, "new", newRef, "err", err)
-		renderBadge(w, "error", "#e05d44")
+		slog.Error("cache read failed for badge", "err", err)
+	}
+
+	if result == nil {
+		// Job is pending or not yet submitted — return a transient badge and let
+		// the client retry. Cache-Control is intentionally short so the browser
+		// re-fetches once the result is ready.
+		w.Header().Set("Cache-Control", "max-age=15")
+		renderBadge(w, "pending", "#9f9f9f")
 		return
 	}
 
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	renderBadge(w, badgeSummary(result), badgeColor(result))
 }
 
-// handlePregenerate enqueues a diff in the background and returns 202 immediately.
-// Accepts old/new as bare digests plus image, or as full image references.
-func (s *Server) handlePregenerate(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	oldRef := q.Get("old")
-	newRef := q.Get("new")
-	image := q.Get("image")
-
-	if image != "" {
-		oldRef = image + "@" + oldRef
-		newRef = image + "@" + newRef
-	}
-
+// handleJobs enqueues a diff computation in the background and returns immediately.
+// POST /jobs?old=<image@sha256:digest>&new=<image@sha256:digest>
+// → 200 OK + Location if already cached
+// → 202 Accepted + Location if enqueued
+func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
+	oldRef := r.URL.Query().Get("old")
+	newRef := r.URL.Query().Get("new")
 	if oldRef == "" || newRef == "" {
 		http.Error(w, "old and new query params are required", http.StatusBadRequest)
 		return
 	}
 
+	loc := "/diff?old=" + url.QueryEscape(oldRef) + "&new=" + url.QueryEscape(newRef)
+	w.Header().Set("Location", loc)
+
 	key := cacheKey(oldRef, newRef)
 	if result, _ := s.cache.Get(key); result != nil {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("cached\n"))
 		return
 	}
 
 	s.startCompute(key, oldRef, newRef)
 	w.WriteHeader(http.StatusAccepted)
-	w.Write([]byte("enqueued\n"))
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -192,7 +195,7 @@ func main() {
 	mux.HandleFunc("GET /diff", srv.handleDiff)
 	mux.HandleFunc("GET /diff.json", srv.handleDiffJSON)
 	mux.HandleFunc("GET /badge", srv.handleBadge)
-	mux.HandleFunc("GET /pregenerate", srv.handlePregenerate)
+	mux.HandleFunc("POST /jobs", srv.handleJobs)
 	mux.HandleFunc("GET /healthz", handleHealth)
 
 	slog.Info("starting server", "port", port, "cache_dir", cacheDir)
