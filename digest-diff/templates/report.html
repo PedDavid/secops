@@ -83,5 +83,26 @@
 </table>
 {{end}}
 
+{{with .Result.Scan}}
+<h2>Scan details</h2>
+<p>Platform: {{.Platform}} · Syft {{.SyftVersion}} · Grype {{.GrypeVersion}}<br>
+Scanned: {{.ScannedAt}}<br>Database identity: <code>{{.DatabaseID}}</code></p>
+<details><summary>Database metadata</summary><pre>{{printf "%s" .Database}}</pre></details>
+{{end}}
+{{with .Result.Vulnerabilities}}
+<h2>Vulnerability changes</h2>
+<p>{{len .Introduced}} introduced · {{len .Resolved}} resolved · {{len .Persisting}} persisting.</p>
+<p>Findings are informational. Resolved means no longer matched in the replacement image; it does not prove exploitability or safety.</p>
+{{template "findings" (findingSection "Introduced" .Introduced)}}
+{{template "findings" (findingSection "Resolved" .Resolved)}}
+<details><summary>Persisting ({{len .Persisting}})</summary>{{template "findings" (findingSection "Persisting" .Persisting)}}</details>
+{{end}}
 </body>
 </html>
+
+{{define "findings"}}
+<h2>{{.Title}}</h2>
+{{if .Items}}<table><thead><tr><th>Vulnerability</th><th>Package</th><th>Severity</th><th>Fix status</th></tr></thead><tbody>
+{{range .Items}}<tr><td>{{.ID}}<br><small>{{.Namespace}}</small></td><td>{{.Package}} ({{.Type}})<br>{{.Version}}</td><td>{{.Severity}}</td><td>{{.FixState}}{{range .FixVersions}}<br>{{.}}{{end}}</td></tr>{{end}}
+</tbody></table>{{else}}<p>None detected.</p>{{end}}
+{{end}}

@@ -7,6 +7,13 @@ import (
 )
 
 func badgeSummary(r *DiffResult) string {
+	if r.Vulnerabilities != nil {
+		return fmt.Sprintf("%s; vulnerabilities +%d / -%d", packageSummary(r), len(r.Vulnerabilities.Introduced), len(r.Vulnerabilities.Resolved))
+	}
+	return packageSummary(r)
+}
+
+func packageSummary(r *DiffResult) string {
 	if len(r.Added) == 0 && len(r.Removed) == 0 && len(r.Changed) == 0 {
 		return "no changes"
 	}
@@ -24,6 +31,17 @@ func badgeSummary(r *DiffResult) string {
 }
 
 func badgeColor(r *DiffResult) string {
+	if r.Vulnerabilities != nil {
+		for _, f := range r.Vulnerabilities.Introduced {
+			if f.Severity == "Critical" || f.Severity == "High" {
+				return "#e05d44"
+			}
+		}
+		if len(r.Vulnerabilities.Introduced) > 0 {
+			return "#dfb317"
+		}
+		return "#4c1"
+	}
 	if len(r.Added) == 0 && len(r.Removed) == 0 && len(r.Changed) == 0 {
 		return "#4c1" // brightgreen
 	}
@@ -32,7 +50,7 @@ func badgeColor(r *DiffResult) string {
 
 // renderBadge writes a shields.io-compatible flat SVG badge.
 func renderBadge(w io.Writer, message, colorHex string) {
-	const label = "packages"
+	const label = "digest diff"
 	// Approximate character width for DejaVu Sans 11px.
 	charWidth := 6.5
 	pad := 10.0

@@ -2,10 +2,9 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
-	"os/exec"
 	"sort"
+	"strings"
 )
 
 type Package struct {
@@ -22,9 +21,11 @@ type ChangedPkg struct {
 }
 
 type DiffResult struct {
-	Added   []Package    `json:"added"`
-	Removed []Package    `json:"removed"`
-	Changed []ChangedPkg `json:"changed"`
+	Scan            *ScanMetadata      `json:"scan,omitempty"`
+	Vulnerabilities *VulnerabilityDiff `json:"vulnerabilities,omitempty"`
+	Added           []Package          `json:"added"`
+	Removed         []Package          `json:"removed"`
+	Changed         []ChangedPkg       `json:"changed"`
 }
 
 type syftArtifact struct {
@@ -37,41 +38,34 @@ type syftOutput struct {
 	Artifacts []syftArtifact `json:"artifacts"`
 }
 
-func scanImage(image string) ([]Package, error) {
-	cmd := exec.Command("syft", "scan", image, "-o", "json", "-q")
-	out, err := cmd.Output()
-	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("syft scan %s: %w\nstderr: %s", image, err, ee.Stderr)
-		}
-		return nil, fmt.Errorf("syft scan %s: %w", image, err)
-	}
-
-	var result syftOutput
-	if err := json.Unmarshal(out, &result); err != nil {
-		return nil, fmt.Errorf("parse syft output for %s: %w", image, err)
-	}
-
-	pkgs := make([]Package, 0, len(result.Artifacts))
-	for _, a := range result.Artifacts {
-		pkgs = append(pkgs, Package{Name: a.Name, Version: a.Version, Type: a.Type})
-	}
-	return pkgs, nil
-}
-
 func computeDiff(oldPkgs, newPkgs []Package) *DiffResult {
 	type key struct{ name, typ string }
 
-	oldMap := make(map[key]string, len(oldPkgs))
-	for _, p := range oldPkgs {
-		oldMap[key{p.Name, p.Type}] = p.Version
+	// Images can contain several installed versions of one language package.
+	// Compare sorted version sets instead of losing all but the last occurrence.
+	index := func(pkgs []Package) map[key]string {
+		sets := map[key]map[string]bool{}
+		for _, p := range pkgs {
+			k := key{p.Name, p.Type}
+			if sets[k] == nil {
+				sets[k] = map[string]bool{}
+			}
+			sets[k][p.Version] = true
+		}
+		out := map[key]string{}
+		for k, set := range sets {
+			versions := make([]string, 0, len(set))
+			for v := range set {
+				versions = append(versions, v)
+			}
+			sort.Strings(versions)
+			out[k] = strings.Join(versions, ", ")
+		}
+		return out
 	}
-	newMap := make(map[key]string, len(newPkgs))
-	for _, p := range newPkgs {
-		newMap[key{p.Name, p.Type}] = p.Version
-	}
+	oldMap, newMap := index(oldPkgs), index(newPkgs)
 
-	result := &DiffResult{}
+	result := &DiffResult{Added: []Package{}, Removed: []Package{}, Changed: []ChangedPkg{}}
 
 	for k, newVer := range newMap {
 		if oldVer, ok := oldMap[k]; !ok {
@@ -90,9 +84,15 @@ func computeDiff(oldPkgs, newPkgs []Package) *DiffResult {
 		}
 	}
 
-	sort.Slice(result.Added, func(i, j int) bool { return result.Added[i].Name < result.Added[j].Name })
-	sort.Slice(result.Removed, func(i, j int) bool { return result.Removed[i].Name < result.Removed[j].Name })
-	sort.Slice(result.Changed, func(i, j int) bool { return result.Changed[i].Name < result.Changed[j].Name })
+	sort.Slice(result.Added, func(i, j int) bool {
+		return result.Added[i].Name+"|"+result.Added[i].Type < result.Added[j].Name+"|"+result.Added[j].Type
+	})
+	sort.Slice(result.Removed, func(i, j int) bool {
+		return result.Removed[i].Name+"|"+result.Removed[i].Type < result.Removed[j].Name+"|"+result.Removed[j].Type
+	})
+	sort.Slice(result.Changed, func(i, j int) bool {
+		return result.Changed[i].Name+"|"+result.Changed[i].Type < result.Changed[j].Name+"|"+result.Changed[j].Type
+	})
 
 	return result
 }

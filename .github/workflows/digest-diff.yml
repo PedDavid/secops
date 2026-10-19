@@ -1,0 +1,77 @@
+name: digest-diff
+on:
+  pull_request:
+    paths: ['digest-diff/**', '.github/workflows/digest-diff.yml']
+  push:
+    branches: [main]
+    paths: ['digest-diff/**', '.github/workflows/digest-diff.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: digest-diff
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.9'
+          cache: false
+      - run: go test -race ./...
+      - run: go vet ./...
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Image name
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "name=ghcr.io/${REPOSITORY,,}/digest-diff" >> "$GITHUB_OUTPUT"
+      - name: Build image for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: digest-diff
+          platforms: linux/amd64
+          load: true
+          tags: digest-diff:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run live comparison in hardened container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker volume create digest-diff-ci-cache
+          trap 'docker logs digest-diff-ci; docker rm -f digest-diff-ci; docker volume rm digest-diff-ci-cache' EXIT
+          docker run -d --name digest-diff-ci --read-only \
+            --tmpfs /tmp:rw,size=4g --cap-drop ALL \
+            --security-opt no-new-privileges --memory 2g \
+            --mount type=volume,source=digest-diff-ci-cache,target=/var/cache/digest-diff \
+            -p 127.0.0.1:8080:8080 digest-diff:ci
+          python3 digest-diff/scripts/smoke.py
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: digest-diff
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+            ${{ steps.image.outputs.name }}:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

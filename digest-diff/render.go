@@ -10,7 +10,12 @@ import (
 //go:embed templates/report.html
 var reportHTML string
 
-var reportTmpl = template.Must(template.New("report").Parse(reportHTML))
+var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{"findingSection": func(title string, items []Finding) any {
+	return struct {
+		Title string
+		Items []Finding
+	}{title, items}
+}}).Parse(reportHTML))
 
 type reportData struct {
 	OldRef string

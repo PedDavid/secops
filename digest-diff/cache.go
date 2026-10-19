@@ -34,14 +34,5 @@ func (c *Cache) Set(key string, result *DiffResult) error {
 	if err := os.MkdirAll(c.dir, 0o755); err != nil {
 		return err
 	}
-	data, err := json.Marshal(result)
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(c.dir, key+".json")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeJSON(filepath.Join(c.dir, key+".json"), result)
 }
