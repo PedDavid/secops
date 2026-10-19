@@ -46,7 +46,7 @@ ingress:
 
 Then add `-f homelab-values.yaml` to the install command. The ingress controller and TLS
 Secret must already exist or be provisioned separately. Authentication is handled by your
-ingress/VPN; the application itself has none. For nginx, long synchronous `/diff` requests
+ingress/VPN; the application itself has none. For nginx, long synchronous `/diff.json` requests
 may need controller timeout annotations; prefer submitting `/jobs` and polling its status.
 
 All defaults are documented in [values.yaml](values.yaml). Other supported settings include:

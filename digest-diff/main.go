@@ -21,16 +21,19 @@ var errBusy = errors.New("scan queue is full; retry later")
 var imageRef = regexp.MustCompile(`^[a-z0-9][a-zA-Z0-9._:/-]*@sha256:[a-f0-9]{64}$`)
 
 type Job struct {
-	State       string     `json:"state"`
-	Error       string     `json:"error,omitempty"`
-	SubmittedAt time.Time  `json:"submitted_at,omitzero"`
-	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+	State         string     `json:"state"`
+	Stage         string     `json:"stage,omitempty"`
+	PackagesReady bool       `json:"packages_ready"`
+	Error         string     `json:"error,omitempty"`
+	SubmittedAt   time.Time  `json:"submitted_at,omitzero"`
+	FinishedAt    *time.Time `json:"finished_at,omitempty"`
 }
 type call struct {
 	done                chan struct{}
 	oldRef, newRef, key string
 	job                 Job
 	result              *DiffResult
+	partial             *DiffResult
 	err                 error
 }
 type Server struct {
@@ -100,6 +103,15 @@ func (s *Server) worker() {
 			c.job.State = "running"
 			s.mu.Unlock()
 			ctx, cancel := context.WithTimeout(s.ctx, s.timeout)
+			ctx = context.WithValue(ctx, progressKey{}, func(stage string, partial *DiffResult) {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				c.job.Stage = stage
+				if partial != nil {
+					c.partial = partial
+					c.job.PackagesReady = true
+				}
+			})
 			r, err := s.compare(ctx, c.oldRef, c.newRef)
 			cancel()
 			if err == nil {
@@ -111,6 +123,10 @@ func (s *Server) worker() {
 			t := time.Now().UTC()
 			c.job.FinishedAt = &t
 			c.job.State = "completed"
+			if err == nil {
+				c.job.Stage = "completed"
+			}
+			c.job.PackagesReady = err == nil || c.partial != nil
 			if err != nil {
 				c.job.State = "failed"
 				c.job.Error = "Scan failed; see service logs for details."
@@ -151,6 +167,38 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	key := s.key(old, new)
+	w.Header().Set("Cache-Control", "no-store")
+	if r.URL.Path == "/diff" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if result := s.cached(key); result != nil {
+			if r.URL.Query().Get("fragment") == "1" {
+				renderFragment(w, result)
+			} else {
+				renderHTML(w, old, new, result)
+			}
+			return
+		}
+		if r.URL.Query().Get("fragment") == "1" {
+			s.mu.Lock()
+			var partial *DiffResult
+			if c := s.jobs[key]; c != nil {
+				partial = c.partial
+			}
+			s.mu.Unlock()
+			w.WriteHeader(http.StatusAccepted)
+			if partial != nil {
+				renderFragment(w, partial)
+			}
+			return
+		}
+		// Rendering never waits for a scanner or a free queue slot.
+		if _, err := s.startCompute(key, old, new); errors.Is(err, errBusy) {
+			w.Header().Set("Retry-After", "30")
+		}
+		renderHTML(w, old, new, nil)
+		return
+	}
 	result, err := s.getOrCompute(r.Context(), s.key(old, new), old, new)
 	if err != nil {
 		if errors.Is(err, errBusy) {
@@ -161,14 +209,8 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	if r.URL.Path == "/diff.json" {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	renderHTML(w, old, new, result)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
 func (s *Server) handleBadge(w http.ResponseWriter, r *http.Request) {
 	old, new, ok := refs(w, r)
@@ -212,7 +254,7 @@ func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Location", "/diff?"+url.Values{"old": {old}, "new": {new}}.Encode())
 	if result := s.cached(key); result != nil {
-		json.NewEncoder(w).Encode(Job{State: "completed", FinishedAt: &result.Scan.ScannedAt})
+		json.NewEncoder(w).Encode(Job{State: "completed", Stage: "completed", PackagesReady: true, FinishedAt: &result.Scan.ScannedAt})
 		return
 	}
 	if r.Method == http.MethodGet {
@@ -249,6 +291,11 @@ func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /assets/progress.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Write([]byte(progressJS))
+	})
 	mux.HandleFunc("GET /diff", s.handleDiff)
 	mux.HandleFunc("GET /diff.json", s.handleDiff)
 	mux.HandleFunc("GET /badge", s.handleBadge)

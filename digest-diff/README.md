@@ -16,16 +16,25 @@ sources are rejected. An optional tag before `@sha256:` is accepted.
 
 | Method | Path | Behavior |
 |---|---|---|
-| GET | `/diff` | HTML report; waits for the scan on a cache miss |
+| GET | `/diff` | Immediate HTML page with live stages, early package results, and final vulnerability results |
 | GET | `/diff.json` | Same report as JSON, retaining `added`, `removed`, `changed` fields |
 | GET | `/badge` | Vulnerability change counts, or not scanned / queued / running / failed / stale |
 | POST | `/jobs` | Submit or retry; 202 for accepted jobs, 200 for a fresh cached report |
 | GET | `/jobs` | Recent job state and failure status; 404 if no known job/report |
 | GET | `/healthz` | HTTP process and initialized scanner binaries are available |
 
-Prefer asynchronous jobs: submit with POST, poll GET `/jobs`, and fetch the report
-when completed. A full queue returns 503 with `Retry-After`. GET `/diff` also submits
-work; a disconnected client does not cancel the shared job. Health does not establish
+The HTML page starts or joins a background job automatically. It polls for stage updates,
+shows package changes before vulnerability matching finishes, and updates in place when
+complete. Failures and full queues show a retry button; package results remain visible
+if vulnerability analysis fails. Fresh cached reports render immediately. JavaScript is
+required for live updates; a link to the blocking JSON report is provided as a fallback.
+
+For API clients, prefer asynchronous jobs: submit with POST, poll GET `/jobs`, and fetch the report
+when completed. Job status includes `stage` and `packages_ready`. The HTML client uses
+`GET /diff?fragment=1&old=...&new=...` for nonblocking report fragments: 202 for partial
+or unavailable content, 200 for the complete fresh report. Fragments never start a job. A full queue returns 503 with `Retry-After`. GET `/diff` also submits
+work; a disconnected client does not cancel the shared job. GET `/diff.json` continues to wait
+for the completed report on a cache miss. Health does not establish
 registry connectivity or database freshness: verify those with a real comparison.
 
 Reports show introduced, resolved, and persisting **package/vulnerability matches**,

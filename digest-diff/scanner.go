@@ -248,16 +248,33 @@ func (s *Scanner) findings(ctx context.Context, sbom, dbID string) ([]Finding, e
 	return fs, writeJSON(path, fs)
 }
 
+// Progress is scoped to a job; snapshots are immutable once published.
+type progressKey struct{}
+
+func reportProgress(ctx context.Context, stage string, partial *DiffResult) {
+	if report, ok := ctx.Value(progressKey{}).(func(string, *DiffResult)); ok {
+		if partial != nil {
+			snapshot := *partial
+			partial = &snapshot
+		}
+		report(stage, partial)
+	}
+}
+
 // Called by the single worker: no database update can occur between the two scans.
 func (s *Scanner) Compare(ctx context.Context, oldRef, newRef string) (*DiffResult, error) {
+	reportProgress(ctx, "inventory_old", nil)
 	oldSBOM, old, err := s.sbom(ctx, oldRef)
 	if err != nil {
 		return nil, err
 	}
+	reportProgress(ctx, "inventory_new", nil)
 	newSBOM, new, err := s.sbom(ctx, newRef)
 	if err != nil {
 		return nil, err
 	}
+	result := computeDiff(old, new)
+	reportProgress(ctx, "database", result)
 	if _, err = run(ctx, "grype", s.args("grype", "db", "update")...); err != nil {
 		return nil, fmt.Errorf("database update: %w", err)
 	}
@@ -279,15 +296,16 @@ func (s *Scanner) Compare(ctx context.Context, oldRef, newRef string) (*DiffResu
 	}
 	// The source URL includes the archive checksum. Include schema and build time; exclude local paths.
 	dbID := hash(status.Built + "|" + status.From + "|" + status.SchemaVersion)
+	reportProgress(ctx, "vulnerabilities_old", nil)
 	oldFindings, err := s.findings(ctx, oldSBOM, dbID)
 	if err != nil {
 		return nil, err
 	}
+	reportProgress(ctx, "vulnerabilities_new", nil)
 	newFindings, err := s.findings(ctx, newSBOM, dbID)
 	if err != nil {
 		return nil, err
 	}
-	result := computeDiff(old, new)
 	result.Vulnerabilities = compareFindings(oldFindings, newFindings)
 	result.Scan = &ScanMetadata{platform, s.syftVersion, s.grypeVersion, db, dbID, time.Now().UTC()}
 	return result, nil

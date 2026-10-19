@@ -9,7 +9,12 @@
   body { font-family: system-ui, -apple-system, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; color: #24292f; }
   h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
   .refs { font-family: ui-monospace, monospace; font-size: 0.82rem; color: #57606a; margin-bottom: 2rem; line-height: 1.8; }
-  .refs span { display: block; }
+  .refs span { display: block; overflow-wrap: anywhere; }
+  #scan-status { background: #f6f8fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; }
+  #scan-status h2 { margin-top: 0; }
+  #scan-progress { width: min(100%, 24rem); }
+  #retry-scan { padding: .5rem 1rem; cursor: pointer; }
+  #scan-status[data-failed="true"] { border-left: 4px solid #cf222e; }
   h2 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
   h2.changed { color: #9a6700; }
   h2.added   { color: #1a7f37; }
@@ -35,67 +40,18 @@
   <span><strong>New:</strong> {{.NewRef}}</span>
 </div>
 
-{{$noChanges := and (eq (len .Result.Added) 0) (eq (len .Result.Removed) 0) (eq (len .Result.Changed) 0)}}
-
-<div class="summary">
-  <div class="stat"><div class="n {{if .Result.Changed}}n-changed{{else}}n-none{{end}}">{{len .Result.Changed}}</div><div class="l">changed</div></div>
-  <div class="stat"><div class="n {{if .Result.Added}}n-added{{else}}n-none{{end}}">{{len .Result.Added}}</div><div class="l">added</div></div>
-  <div class="stat"><div class="n {{if .Result.Removed}}n-removed{{else}}n-none{{end}}">{{len .Result.Removed}}</div><div class="l">removed</div></div>
-</div>
-
-{{if $noChanges}}
-<p class="empty">No package differences found between the two digests.</p>
-{{end}}
-
-{{if .Result.Changed}}
-<h2 class="changed">Changed ({{len .Result.Changed}})</h2>
-<table>
-  <thead><tr><th>Package</th><th>Type</th><th>Old Version</th><th>New Version</th></tr></thead>
-  <tbody>
-  {{range .Result.Changed}}
-  <tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.OldVersion}}</td><td>{{.NewVersion}}</td></tr>
-  {{end}}
-  </tbody>
-</table>
-{{end}}
-
-{{if .Result.Added}}
-<h2 class="added">Added ({{len .Result.Added}})</h2>
-<table>
-  <thead><tr><th>Package</th><th>Type</th><th>Version</th></tr></thead>
-  <tbody>
-  {{range .Result.Added}}
-  <tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.Version}}</td></tr>
-  {{end}}
-  </tbody>
-</table>
-{{end}}
-
-{{if .Result.Removed}}
-<h2 class="removed">Removed ({{len .Result.Removed}})</h2>
-<table>
-  <thead><tr><th>Package</th><th>Type</th><th>Version</th></tr></thead>
-  <tbody>
-  {{range .Result.Removed}}
-  <tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.Version}}</td></tr>
-  {{end}}
-  </tbody>
-</table>
-{{end}}
-
-{{with .Result.Scan}}
-<h2>Scan details</h2>
-<p>Platform: {{.Platform}} · Syft {{.SyftVersion}} · Grype {{.GrypeVersion}}<br>
-Scanned: {{.ScannedAt}}<br>Database identity: <code>{{.DatabaseID}}</code></p>
-<details><summary>Database metadata</summary><pre>{{printf "%s" .Database}}</pre></details>
-{{end}}
-{{with .Result.Vulnerabilities}}
-<h2>Vulnerability changes</h2>
-<p>{{len .Introduced}} introduced · {{len .Resolved}} resolved · {{len .Persisting}} persisting.</p>
-<p>Findings are informational. Resolved means no longer matched in the replacement image; it does not prove exploitability or safety.</p>
-{{template "findings" (findingSection "Introduced" .Introduced)}}
-{{template "findings" (findingSection "Resolved" .Resolved)}}
-<details><summary>Persisting ({{len .Persisting}})</summary>{{template "findings" (findingSection "Persisting" .Persisting)}}</details>
+{{if .Result}}
+<main id="report">{{template "reportContent" .Result}}</main>
+{{else}}
+<section id="scan-status" role="status" aria-live="polite">
+  <h2>Preparing comparison</h2>
+  <p id="status-message">Starting the scan…</p>
+  <progress id="scan-progress" aria-label="Scan in progress"></progress>
+  <button id="retry-scan" type="button" hidden>Retry</button>
+</section>
+<main id="report" aria-busy="true"></main>
+<noscript><p>Enable JavaScript for live progress, or <a href="/diff.json?old={{.OldRef}}&amp;new={{.NewRef}}">wait for the complete JSON report</a>.</p></noscript>
+<script src="/assets/progress.js" defer></script>
 {{end}}
 </body>
 </html>
@@ -105,4 +61,71 @@ Scanned: {{.ScannedAt}}<br>Database identity: <code>{{.DatabaseID}}</code></p>
 {{if .Items}}<table><thead><tr><th>Vulnerability</th><th>Package</th><th>Severity</th><th>Fix status</th></tr></thead><tbody>
 {{range .Items}}<tr><td>{{.ID}}<br><small>{{.Namespace}}</small></td><td>{{.Package}} ({{.Type}})<br>{{.Version}}</td><td>{{.Severity}}</td><td>{{.FixState}}{{range .FixVersions}}<br>{{.}}{{end}}</td></tr>{{end}}
 </tbody></table>{{else}}<p>None detected.</p>{{end}}
+{{end}}
+
+{{define "reportContent"}}
+{{$noChanges := and (eq (len .Added) 0) (eq (len .Removed) 0) (eq (len .Changed) 0)}}
+
+<div class="summary">
+  <div class="stat"><div class="n {{if .Changed}}n-changed{{else}}n-none{{end}}">{{len .Changed}}</div><div class="l">changed</div></div>
+  <div class="stat"><div class="n {{if .Added}}n-added{{else}}n-none{{end}}">{{len .Added}}</div><div class="l">added</div></div>
+  <div class="stat"><div class="n {{if .Removed}}n-removed{{else}}n-none{{end}}">{{len .Removed}}</div><div class="l">removed</div></div>
+</div>
+
+{{if $noChanges}}
+<p class="empty">No package differences found between the two digests.</p>
+{{end}}
+
+{{if .Changed}}
+<h2 class="changed">Changed ({{len .Changed}})</h2>
+<table>
+  <thead><tr><th>Package</th><th>Type</th><th>Old Version</th><th>New Version</th></tr></thead>
+  <tbody>
+  {{range .Changed}}
+  <tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.OldVersion}}</td><td>{{.NewVersion}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{if .Added}}
+<h2 class="added">Added ({{len .Added}})</h2>
+<table>
+  <thead><tr><th>Package</th><th>Type</th><th>Version</th></tr></thead>
+  <tbody>
+  {{range .Added}}
+  <tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.Version}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{if .Removed}}
+<h2 class="removed">Removed ({{len .Removed}})</h2>
+<table>
+  <thead><tr><th>Package</th><th>Type</th><th>Version</th></tr></thead>
+  <tbody>
+  {{range .Removed}}
+  <tr><td>{{.Name}}</td><td>{{.Type}}</td><td>{{.Version}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{with .Scan}}
+<h2>Scan details</h2>
+<p>Platform: {{.Platform}} · Syft {{.SyftVersion}} · Grype {{.GrypeVersion}}<br>
+Scanned: {{.ScannedAt}}<br>Database identity: <code>{{.DatabaseID}}</code></p>
+<details><summary>Database metadata</summary><pre>{{printf "%s" .Database}}</pre></details>
+{{end}}
+{{with .Vulnerabilities}}
+<h2>Vulnerability changes</h2>
+<p>{{len .Introduced}} introduced · {{len .Resolved}} resolved · {{len .Persisting}} persisting.</p>
+<p>Findings are informational. Resolved means no longer matched in the replacement image; it does not prove exploitability or safety.</p>
+{{template "findings" (findingSection "Introduced" .Introduced)}}
+{{template "findings" (findingSection "Resolved" .Resolved)}}
+<details><summary>Persisting ({{len .Persisting}})</summary>{{template "findings" (findingSection "Persisting" .Persisting)}}</details>
+{{end}}
+
+{{if not .Vulnerabilities}}<p class="empty">Package comparison complete. Vulnerability results are still pending.</p>{{end}}
 {{end}}
