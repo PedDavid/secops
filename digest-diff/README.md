@@ -39,6 +39,8 @@ registry connectivity or database freshness: verify those with a real comparison
 
 Reports show introduced, resolved, and persisting **package/vulnerability matches**,
 severity, fix status/versions, platform, scanner versions, database metadata, and scan time.
+Vulnerability IDs link to Grype’s source advisory when available, with CVE.org or GitHub
+Advisory fallbacks for cached CVE/GHSA findings.
 Findings are matched by vulnerability ID + namespace + package name + package type;
 installed version is excluded so vulnerable upgrades can remain persisting. Duplicate
 matches for the same installed version are collapsed. Counts are package findings, not

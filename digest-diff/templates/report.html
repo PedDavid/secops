@@ -59,7 +59,7 @@
 {{define "findings"}}
 <h2>{{.Title}}</h2>
 {{if .Items}}<table><thead><tr><th>Vulnerability</th><th>Package</th><th>Severity</th><th>Fix status</th></tr></thead><tbody>
-{{range .Items}}<tr><td>{{.ID}}<br><small>{{.Namespace}}</small></td><td>{{.Package}} ({{.Type}})<br>{{.Version}}</td><td>{{.Severity}}</td><td>{{.FixState}}{{range .FixVersions}}<br>{{.}}{{end}}</td></tr>{{end}}
+{{range .Items}}<tr><td>{{if .Link}}<a href="{{.Link}}" target="_blank" rel="noopener noreferrer">{{.ID}}</a>{{else}}{{.ID}}{{end}}<br><small>{{.Namespace}}</small></td><td>{{.Package}} ({{.Type}})<br>{{.Version}}</td><td>{{.Severity}}</td><td>{{.FixState}}{{range .FixVersions}}<br>{{.}}{{end}}</td></tr>{{end}}
 </tbody></table>{{else}}<p>None detected.</p>{{end}}
 {{end}}
 

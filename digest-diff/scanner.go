@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -29,6 +31,7 @@ type ScanMetadata struct {
 }
 type Finding struct {
 	ID          string   `json:"id"`
+	URL         string   `json:"url,omitempty"`
 	Namespace   string   `json:"namespace"`
 	Package     string   `json:"package"`
 	Type        string   `json:"type"`
@@ -37,6 +40,24 @@ type Finding struct {
 	FixState    string   `json:"fix_state"`
 	FixVersions []string `json:"fix_versions"`
 }
+
+var cveID = regexp.MustCompile(`^CVE-[0-9]{4}-[0-9]{4,}$`)
+var ghsaID = regexp.MustCompile(`^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$`)
+
+// Link also supports cached findings written before advisory URLs were retained.
+func (f Finding) Link() string {
+	if u, err := url.Parse(f.URL); err == nil && u.Hostname() != "" && u.User == nil && (u.Scheme == "https" || u.Scheme == "http") {
+		return u.String()
+	}
+	if cveID.MatchString(f.ID) {
+		return "https://www.cve.org/CVERecord?id=" + f.ID
+	}
+	if ghsaID.MatchString(f.ID) {
+		return "https://github.com/advisories/" + f.ID
+	}
+	return ""
+}
+
 type VulnerabilityDiff struct {
 	Introduced []Finding `json:"introduced"`
 	Resolved   []Finding `json:"resolved"`
@@ -45,10 +66,11 @@ type VulnerabilityDiff struct {
 type grypeOutput struct {
 	Matches []struct {
 		Vulnerability struct {
-			ID        string `json:"id"`
-			Namespace string `json:"namespace"`
-			Severity  string `json:"severity"`
-			Fix       struct {
+			ID         string `json:"id"`
+			DataSource string `json:"dataSource"`
+			Namespace  string `json:"namespace"`
+			Severity   string `json:"severity"`
+			Fix        struct {
 				State    string   `json:"state"`
 				Versions []string `json:"versions"`
 			} `json:"fix"`
@@ -184,7 +206,7 @@ func parseFindings(data []byte) ([]Finding, error) {
 	seen := map[string]bool{}
 	for _, m := range out.Matches {
 		v := m.Vulnerability
-		f := Finding{v.ID, v.Namespace, m.Artifact.Name, m.Artifact.Type, m.Artifact.Version, v.Severity, v.Fix.State, v.Fix.Versions}
+		f := Finding{ID: v.ID, URL: v.DataSource, Namespace: v.Namespace, Package: m.Artifact.Name, Type: m.Artifact.Type, Version: m.Artifact.Version, Severity: v.Severity, FixState: v.Fix.State, FixVersions: v.Fix.Versions}
 		key := findingKey(f) + "|" + f.Version
 		if !seen[key] {
 			findings = append(findings, f)

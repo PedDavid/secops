@@ -27,9 +27,9 @@ func TestVulnerabilityComparison(t *testing.T) {
 	}
 }
 func TestParseFindingsDeduplicatesLocations(t *testing.T) {
-	match := `{"vulnerability":{"id":"CVE-1","namespace":"debian:12","severity":"High","fix":{"state":"fixed","versions":["3"]}},"artifact":{"name":"libssl","version":"2","type":"deb"}}`
+	match := `{"vulnerability":{"id":"CVE-1","dataSource":"https://security-tracker.debian.org/tracker/CVE-1","namespace":"debian:12","severity":"High","fix":{"state":"fixed","versions":["3"]}},"artifact":{"name":"libssl","version":"2","type":"deb"}}`
 	fs, err := parseFindings([]byte(`{"matches":[` + match + `,` + match + `]}`))
-	if err != nil || len(fs) != 1 || fs[0].FixState != "fixed" {
+	if err != nil || len(fs) != 1 || fs[0].FixState != "fixed" || fs[0].Link() != "https://security-tracker.debian.org/tracker/CVE-1" {
 		t.Fatalf("%+v %v", fs, err)
 	}
 	if _, err := parseFindings([]byte(`broken`)); err == nil {
@@ -332,5 +332,36 @@ func TestPackageDiffRetainsMultipleVersions(t *testing.T) {
 	d := computeDiff(old, []Package{{"library", "2", "python"}})
 	if len(d.Changed) != 1 || d.Changed[0].OldVersion != "1, 2" || d.Changed[0].NewVersion != "2" {
 		t.Fatalf("lost installed version: %+v", d)
+	}
+}
+
+func TestAdvisoryLinks(t *testing.T) {
+	for _, tc := range []struct {
+		finding Finding
+		want    string
+	}{
+		{Finding{ID: "CVE-2025-12345"}, "https://www.cve.org/CVERecord?id=CVE-2025-12345"},
+		{Finding{ID: "GHSA-abcd-1234-efgh"}, "https://github.com/advisories/GHSA-abcd-1234-efgh"},
+		{Finding{ID: "CVE-2025-12345", URL: "https://security.example.org/advisory/123"}, "https://security.example.org/advisory/123"},
+		{Finding{ID: "CVE-2025-12345", URL: "javascript:alert(1)"}, "https://www.cve.org/CVERecord?id=CVE-2025-12345"},
+		{Finding{ID: "unknown", URL: "//evil.example/advisory"}, ""},
+		{Finding{ID: "unknown", URL: "https://user:password@example.org/advisory"}, ""},
+		{Finding{ID: "<script>alert(1)</script>"}, ""},
+	} {
+		if got := tc.finding.Link(); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.finding.ID, got, tc.want)
+		}
+	}
+	r := result()
+	for _, section := range []*[]Finding{&r.Vulnerabilities.Introduced, &r.Vulnerabilities.Resolved, &r.Vulnerabilities.Persisting} {
+		*section = []Finding{{ID: "CVE-2025-12345"}}
+	}
+	var full, fragment bytes.Buffer
+	renderHTML(&full, "old", "new", r)
+	renderFragment(&fragment, r)
+	for _, html := range []string{full.String(), fragment.String()} {
+		if strings.Count(html, `href="https://www.cve.org/CVERecord?id=CVE-2025-12345"`) != 3 {
+			t.Fatal("missing advisory links in report sections")
+		}
 	}
 }
