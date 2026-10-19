@@ -1,0 +1,15 @@
+Release {{ .Release.Name }} installed in {{ .Release.Namespace }}.
+
+Inspect readiness:
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "digest-diff.fullname" . }}
+
+Forward the service:
+  kubectl -n {{ .Release.Namespace }} port-forward service/{{ include "digest-diff.fullname" . }} 8080:{{ .Values.service.port }}
+
+Then run the repository's real image comparison:
+  python3 digest-diff/scripts/smoke.py
+
+{{ if and .Values.persistence.enabled .Values.persistence.keep (not .Values.persistence.existingClaim) -}}
+The PVC {{ include "digest-diff.claim" . }} is retained on uninstall. To reuse it after
+reinstalling, set persistence.existingClaim={{ include "digest-diff.claim" . }}.
+{{ end -}}

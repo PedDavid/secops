@@ -91,6 +91,19 @@ docker build --platform linux/amd64 -t ghcr.io/peddavid/secops/digest-diff:dev .
 
 ## Deploy to Kubernetes
 
+For a configurable Helm installation, use the [Helm chart](charts/digest-diff/README.md):
+
+```sh
+# From the repository root:
+helm upgrade --install digest-diff ./digest-diff/charts/digest-diff \
+  --namespace secops --create-namespace --wait --timeout 5m
+```
+
+It supports custom storage, image tags/digests, resources, scheduling, and optional ingress.
+The existing Kustomize manifests remain an alternative; choose one deployment method.
+See the chart's migration steps if those resources are already installed.
+
+
 Requires an amd64 Linux node and a default StorageClass supporting a 5Gi ReadWriteOnce
 PVC. Customize `k8s/pvc.yaml` if you need an explicit StorageClass or more space.
 Use one replica; Recreate updates avoid simultaneous database writers and RWO mount

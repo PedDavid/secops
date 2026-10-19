@@ -1,0 +1,10 @@
+apiVersion: v2
+name: digest-diff
+description: Syft package and Grype vulnerability comparisons for container digest updates
+type: application
+version: 0.1.0
+appVersion: "28f0b4d"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/PedDavid/secops
+sources:
+  - https://github.com/PedDavid/secops

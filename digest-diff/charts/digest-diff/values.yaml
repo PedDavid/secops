@@ -1,0 +1,46 @@
+nameOverride: ""
+fullnameOverride: ""
+image:
+  repository: ghcr.io/peddavid/secops/digest-diff
+  # Pin the first published implementation; override for subsequent upgrades.
+  tag: sha-28f0b4d8fdc02e1fe05763d3f2bd2c704cd833c0
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+scan:
+  ttl: 6h
+  timeout: 15m
+persistence:
+  enabled: true
+  existingClaim: ""
+  size: 5Gi
+  # null uses the cluster default; "" explicitly requests no StorageClass.
+  storageClass: null
+  # Keep the generated PVC when uninstalling the release.
+  keep: true
+tmpSizeLimit: 4Gi
+service:
+  port: 80
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: digest-diff.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+nodeSelector:
+  kubernetes.io/arch: amd64
+  kubernetes.io/os: linux
+tolerations: []
+affinity: {}
+podAnnotations: {}

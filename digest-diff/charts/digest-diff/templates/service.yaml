@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "digest-diff.fullname" . }}
+  labels:
+    {{- include "digest-diff.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "digest-diff.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
