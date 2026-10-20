@@ -169,17 +169,29 @@ struct Layout {
     dev_auth: bool,
     dark: bool,
     palette: String,
+    appearance: String,
     asset_version: String,
     demo: bool,
 }
 fn layout(s: &AppState, user: &Session, cookies: &CookieJar, title: &str) -> Layout {
-    let palette = cookies
+    let palette: String = cookies
         .get("digest_diff_palette")
         .map(|c| c.value())
         .filter(|p| ["neutral", "blue", "green", "orange", "violet"].contains(p))
         .unwrap_or("neutral")
         .into();
+    let appearance = cookies
+        .get("digest_diff_appearance")
+        .map(|c| c.value())
+        .filter(|m| ["minimal", "accent", "full"].contains(m))
+        .unwrap_or(if palette == "neutral" {
+            "minimal"
+        } else {
+            "accent"
+        })
+        .into();
     Layout {
+        appearance,
         title: title.into(),
         user: user.name.clone(),
         csrf: user.csrf.clone(),

@@ -20,6 +20,14 @@ The original Go service remains in `../digest-diff`; v2 has a separate image,
 chart, data volume, configuration and release lifecycle. See
 [FOUNDATIONS.md](docs/FOUNDATIONS.md) for source commits and architecture.
 
+The **Theme** menu offers Minimal (neutral), Accent color (your selected palette),
+and Full (git-style difference highlights). Full uses green/red for added/removed
+packages and old/new version cells, amber for changed packages, red for introduced
+vulnerabilities, and green for resolved findings. Persisting findings stay neutral.
+The separate light/dark toggle works in every mode; settings persist in cookies.
+
+![Full diff highlights](docs/screenshots/report-full.png)
+
 ## Try the UI
 
 ```sh
@@ -37,7 +45,7 @@ After the release workflow publishes the image and chart:
 
 ```sh
 helm upgrade --install digest-diff-2 \
-  oci://ghcr.io/peddavid/secops/charts/digest-diff-2 --version 0.1.0 \
+  oci://ghcr.io/peddavid/secops/charts/digest-diff-2 --version 0.1.1 \
   -n digest-diff-2 --create-namespace \
   --set publicUrl=https://digest-diff.example.com \
   --set oidc.issuer=https://auth.example.com/application/o/digest-diff/ \

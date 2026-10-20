@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="{% if layout.dark %}dark{% endif %}" data-palette="{{ layout.palette }}">
+<html lang="en" class="{% if layout.dark %}dark{% endif %}" data-palette="{{ layout.palette }}" data-appearance="{{ layout.appearance }}">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'>
@@ -18,7 +18,25 @@
 <nav aria-label="Main"><a class="btn" data-variant="ghost" href="/">Comparisons</a></nav>
 <div class="ms-auto flex items-center gap-1">
 <button type="button" class="btn" data-variant="ghost" data-theme-toggle aria-label="Toggle dark mode">{% include "icons/moon.svg" %}</button>
-<button type="button" class="btn" data-variant="ghost" data-palette-cycle aria-label="Change colour palette">{% include "icons/palette.svg" %}</button>
+<details class="theme-menu">
+<summary class="btn" data-variant="ghost">{% include "icons/palette.svg" %}<span>Theme</span></summary>
+<div class="theme-panel">
+<label for="appearance-mode">Appearance</label>
+<select id="appearance-mode" class="select" data-appearance-select>
+<option value="minimal" {% if layout.appearance == "minimal" %}selected{% endif %}>Minimal</option>
+<option value="accent" {% if layout.appearance == "accent" %}selected{% endif %}>Accent color</option>
+<option value="full" {% if layout.appearance == "full" %}selected{% endif %}>Full · diff highlights</option>
+</select>
+<label for="accent-palette">Accent color</label>
+<select id="accent-palette" class="select" data-palette-select>
+<option value="neutral" {% if layout.palette == "neutral" %}selected{% endif %}>Neutral</option>
+<option value="blue" {% if layout.palette == "blue" %}selected{% endif %}>Blue</option>
+<option value="green" {% if layout.palette == "green" %}selected{% endif %}>Green</option>
+<option value="orange" {% if layout.palette == "orange" %}selected{% endif %}>Orange</option>
+<option value="violet" {% if layout.palette == "violet" %}selected{% endif %}>Violet</option>
+</select>
+<p>Full highlights package additions in green, removals in red, and old/new versions like a git diff. Introduced vulnerabilities are red; resolved findings are green.</p>
+</div></details>
 <span class="user-label text-sm text-muted-foreground">{{ layout.user }}</span>
 {% if !layout.dev_auth %}<form method="post" action="/auth/logout"><input type="hidden" name="_csrf" value="{{ layout.csrf }}"><button class="btn" data-variant="ghost" type="submit" aria-label="Log out">{% include "icons/log-out.svg" %}</button></form>{% endif %}
 </div></div></header>
