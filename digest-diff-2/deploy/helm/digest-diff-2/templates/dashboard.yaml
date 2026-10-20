@@ -1,0 +1,12 @@
+{{- if .Values.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "digest-diff-2.fullname" . }}-dashboard
+  labels:
+    {{- include "digest-diff-2.labels" . | nindent 4 }}
+    {{- toYaml .Values.grafanaDashboard.labels | nindent 4 }}
+data:
+  digest-diff.json: |
+    {{- .Files.Get "files/dashboard.json" | nindent 4 }}
+{{- end }}

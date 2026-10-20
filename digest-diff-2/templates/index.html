@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-heading"><div><h1 class="text-2xl font-semibold">Image comparisons</h1><p class="text-muted-foreground">See what changed between the image you run and its replacement.</p></div></div>
+{% if layout.admin %}
+<section class="card compare-card" aria-labelledby="compare-heading"><header class="card-header"><h2 id="compare-heading" class="card-title">Compare two digests</h2><p class="card-description">Package changes first. Vulnerability findings as the scan completes.</p></header>
+<form class="card-content" action="/comparisons" method="post"><input type="hidden" name="_csrf" value="{{ layout.csrf }}">
+<div class="compare-fields"><label>Original image<input class="input" name="old" placeholder="postgres:18@sha256:…" required maxlength="512" spellcheck="false"></label><label>Updated image<input class="input" name="new" placeholder="postgres:18@sha256:…" required maxlength="512" spellcheck="false"></label></div>
+<button class="btn" type="submit">Compare images</button></form></section>
+{% endif %}
+<section class="card"><header class="card-header history-heading"><h2 class="card-title">Recent comparisons</h2><form method="get" role="search"><input type="search" class="input" name="q" value="{{ query }}" aria-label="Search comparisons" placeholder="Search images…" data-search></form></header>
+<section class="card-content table-scroll"><table class="table"><thead><tr><th>Image</th><th>State</th><th>Findings</th><th></th></tr></thead><tbody>
+{% for job in jobs %}<tr><td><a class="image-name" href="/diff?{{ job.pair.query() }}">{{ job.pair.old }}</a><div class="text-sm text-muted-foreground image-name">→ {{ job.pair.new }}</div></td><td><span class="badge" data-state="{{ job.state }}">{{ job.state }}</span></td><td>{{ job.summary() }}</td><td><a class="btn" data-variant="outline" data-size="sm" href="/diff?{{ job.pair.query() }}">Open</a></td></tr>
+{% else %}<tr><td colspan="4" class="empty-state">No comparisons yet. Submit two image digests to start.</td></tr>{% endfor %}
+</tbody></table></section></section>
+{% endblock %}

@@ -1,0 +1,172 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "digest-diff-2.fullname" . }}
+  labels:
+    {{- include "digest-diff-2.labels" . | nindent 4 }}
+spec:
+  # The worker and database cache require a single writer.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "digest-diff-2.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "digest-diff-2.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: digest-diff-2
+          {{- if .Values.image.digest }}
+          image: {{ printf "%s@%s" .Values.image.repository .Values.image.digest | quote }}
+          {{- else }}
+          image: {{ printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) | quote }}
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: DIGEST_DIFF_PUBLIC_URL
+              value: {{ .Values.publicUrl | quote }}
+            - name: DIGEST_DIFF_DATA_DIR
+              value: /data
+            - name: DIGEST_DIFF_SCAN_TTL
+              value: {{ .Values.scan.ttl | quote }}
+            - name: DIGEST_DIFF_SCAN_TIMEOUT
+              value: {{ .Values.scan.timeout | quote }}
+            - name: DIGEST_DIFF_ALLOWED_REGISTRIES
+              value: {{ join "," .Values.scan.allowedRegistries | quote }}
+            - name: DIGEST_DIFF_PUBLIC_BADGES
+              value: {{ .Values.publicBadges | quote }}
+            - name: DIGEST_DIFF_COOKIE_KEY_FILE
+              value: /etc/digest-diff/cookie/cookie-key
+            - name: DIGEST_DIFF_LOG_JSON
+              value: "true"
+            {{- if .Values.demo }}
+            - name: DIGEST_DIFF_DEMO
+              value: "true"
+            {{- else if .Values.insecureDevAuth }}
+            - name: DIGEST_DIFF_INSECURE_DEV_AUTH
+              value: "true"
+            {{- else }}
+            - name: DIGEST_DIFF_OIDC_ISSUER
+              value: {{ required "Set oidc.issuer (or explicitly enable demo/insecureDevAuth)" .Values.oidc.issuer | quote }}
+            - name: DIGEST_DIFF_OIDC_CLIENT_ID
+              value: {{ .Values.oidc.clientId | quote }}
+            - name: DIGEST_DIFF_OIDC_SCOPES
+              value: {{ .Values.oidc.scopes | quote }}
+            - name: DIGEST_DIFF_ADMIN_CLAIM
+              value: {{ .Values.oidc.adminClaim | quote }}
+            - name: DIGEST_DIFF_ADMIN_VALUE
+              value: {{ .Values.oidc.adminValue | quote }}
+            - name: DIGEST_DIFF_SESSION_TTL
+              value: {{ .Values.oidc.sessionTtl | quote }}
+            {{- end }}
+            {{- if .Values.oidc.clientSecret.existingSecret }}
+            - name: DIGEST_DIFF_OIDC_CLIENT_SECRET_FILE
+              value: /etc/digest-diff/oidc/client-secret
+            {{- end }}
+            {{- if .Values.apiToken.existingSecret }}
+            - name: DIGEST_DIFF_API_TOKEN_FILE
+              value: /etc/digest-diff/api/token
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: cache
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+            - name: cookie
+              mountPath: /etc/digest-diff/cookie
+              readOnly: true
+            {{- if .Values.oidc.clientSecret.existingSecret }}
+            - name: oidc
+              mountPath: /etc/digest-diff/oidc
+              readOnly: true
+            {{- end }}
+            {{- if .Values.apiToken.existingSecret }}
+            - name: api
+              mountPath: /etc/digest-diff/api
+              readOnly: true
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            initialDelaySeconds: 3
+            periodSeconds: 10
+      volumes:
+        - name: cookie
+          secret:
+            secretName: {{ include "digest-diff-2.cookieSecret" . }}
+        {{- if .Values.oidc.clientSecret.existingSecret }}
+        - name: oidc
+          secret:
+            secretName: {{ .Values.oidc.clientSecret.existingSecret }}
+            items:
+              - key: {{ .Values.oidc.clientSecret.key }}
+                path: client-secret
+        {{- end }}
+        {{- if .Values.apiToken.existingSecret }}
+        - name: api
+          secret:
+            secretName: {{ .Values.apiToken.existingSecret }}
+            items:
+              - key: {{ .Values.apiToken.key }}
+                path: token
+        {{- end }}
+        - name: cache
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "digest-diff-2.claim" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ .Values.tmpSizeLimit | quote }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

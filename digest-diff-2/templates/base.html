@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" class="{% if layout.dark %}dark{% endif %}" data-palette="{{ layout.palette }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'>
+<title>{{ layout.title }} · digest-diff</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v={{ layout.asset_version }}">
+<link rel="stylesheet" href="/assets/dist/app.css?v={{ layout.asset_version }}">
+<link rel="stylesheet" href="/assets/diff.css?v={{ layout.asset_version }}">
+<script src="/assets/vendor/htmx/htmx.min.js?v={{ layout.asset_version }}" defer></script>
+<script src="/assets/js/app.js?v={{ layout.asset_version }}" defer></script>
+</head>
+<body class="min-h-screen bg-background text-foreground antialiased">
+{% if layout.dev_auth %}<div class="dev-banner">{% if layout.demo %}Demo · sample comparisons, no registry requests{% else %}Development authentication · all visitors are administrators{% endif %}</div>{% endif %}
+<header class="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
+<div class="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
+<a href="/" class="brand font-semibold">{% include "icons/package.svg" %}<span>digest-diff</span><span class="badge" data-variant="secondary">v2</span></a>
+<nav aria-label="Main"><a class="btn" data-variant="ghost" href="/">Comparisons</a></nav>
+<div class="ms-auto flex items-center gap-1">
+<button type="button" class="btn" data-variant="ghost" data-theme-toggle aria-label="Toggle dark mode">{% include "icons/moon.svg" %}</button>
+<button type="button" class="btn" data-variant="ghost" data-palette-cycle aria-label="Change colour palette">{% include "icons/palette.svg" %}</button>
+<span class="user-label text-sm text-muted-foreground">{{ layout.user }}</span>
+{% if !layout.dev_auth %}<form method="post" action="/auth/logout"><input type="hidden" name="_csrf" value="{{ layout.csrf }}"><button class="btn" data-variant="ghost" type="submit" aria-label="Log out">{% include "icons/log-out.svg" %}</button></form>{% endif %}
+</div></div></header>
+<main class="mx-auto max-w-6xl px-4 py-6">{% block content %}{% endblock %}</main>
+<footer class="mx-auto max-w-6xl px-4 py-6 text-sm text-muted-foreground">Syft inventories · Grype vulnerability matching · linux/amd64</footer>
+<div id="connection-notice" class="connection-notice" role="status" hidden>Connection interrupted. Progress will resume when the service returns.</div>
+</body></html>

@@ -1,0 +1,28 @@
+{% macro findings(title, items) %}
+<section class="card findings"><header class="card-header"><h3 class="card-title">{{ title }} <span class="badge" data-variant="secondary">{{ items.len() }}</span></h3></header><section class="card-content table-scroll"><table class="table"><thead><tr><th>Vulnerability</th><th>Package</th><th>Severity</th><th>Fix</th></tr></thead><tbody>
+{% for f in items %}<tr><td>{% if !f.link().is_empty() %}<a class="advisory-link" href="{{ f.link() }}" target="_blank" rel="noopener noreferrer">{{ f.id }} ↗</a>{% else %}{{ f.id }}{% endif %}<div class="text-sm text-muted-foreground">{{ f.namespace }}</div></td><td><strong>{{ f.package }}</strong><div class="text-sm text-muted-foreground">{{ f.version }} · {{ f.kind }}</div></td><td><span class="badge" data-severity="{{ f.severity }}">{{ f.severity }}</span></td><td>{{ f.fix_state }}{% for v in f.fix_versions %}<div class="text-sm">{{ v }}</div>{% endfor %}</td></tr>{% else %}<tr><td colspan="4" class="empty-state">None detected.</td></tr>{% endfor %}
+</tbody></table></section></section>
+{% endmacro %}
+<section id="comparison" {% if job.pending() %}hx-get="/comparisons/{{ job.id }}/fragment" hx-trigger="every 2s" hx-swap="outerHTML" aria-busy="true"{% endif %}>
+<div class="scan-status card" role="status" aria-live="polite" data-state="{{ job.state }}"><header class="card-header"><div class="status-heading"><h2 class="card-title">{{ job.stage_label() }}</h2><span class="badge">{{ job.state }}</span></div>
+{% if job.pending() %}<progress aria-label="Comparison in progress"></progress><p class="card-description">The first comparison downloads image inventories and the vulnerability database.</p><noscript>Refresh this page to check progress.</noscript>{% endif %}
+{% match job.error %}{% when Some with (error) %}<p class="error-message">{{ error }}</p>{% when None %}{% endmatch %}
+{% if !job.pending() && admin %}<form action="/comparisons" method="post"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="old" value="{{ job.pair.old }}"><input type="hidden" name="new" value="{{ job.pair.new }}"><button class="btn" data-variant="outline" type="submit">{% if job.state == "failed" %}Retry comparison{% else %}Run comparison{% endif %}</button></form>{% endif %}
+</header></div>
+{% match job.result %}{% when Some with (r) %}
+<div class="summary-grid"><div class="card stat"><span class="text-muted-foreground">Changed packages</span><strong>{{ r.changed.len() }}</strong></div><div class="card stat"><span class="text-muted-foreground">Added packages</span><strong>{{ r.added.len() }}</strong></div><div class="card stat"><span class="text-muted-foreground">Removed packages</span><strong>{{ r.removed.len() }}</strong></div></div>
+<section class="card"><header class="card-header"><h2 class="card-title">Package changes</h2></header><section class="card-content table-scroll"><table class="table"><thead><tr><th>Package</th><th>Type</th><th>Original</th><th>Updated</th></tr></thead><tbody>
+{% for p in r.changed %}<tr><td>{{ p.name }}</td><td>{{ p.kind }}</td><td><code>{{ p.old_version }}</code></td><td><code>{{ p.new_version }}</code></td></tr>{% endfor %}
+{% for p in r.added %}<tr><td>{{ p.name }} <span class="badge" data-state="completed">added</span></td><td>{{ p.kind }}</td><td>—</td><td><code>{{ p.version }}</code></td></tr>{% endfor %}
+{% for p in r.removed %}<tr><td>{{ p.name }} <span class="badge" data-state="failed">removed</span></td><td>{{ p.kind }}</td><td><code>{{ p.version }}</code></td><td>—</td></tr>{% endfor %}
+{% if r.changed.is_empty() && r.added.is_empty() && r.removed.is_empty() %}<tr><td colspan="4" class="empty-state">No package differences.</td></tr>{% endif %}
+</tbody></table></section></section>
+{% match r.vulnerabilities %}{% when Some with (v) %}
+<div class="page-heading"><div><h2 class="text-xl font-semibold">Vulnerability changes</h2><p class="text-sm text-muted-foreground">Both inventories matched against the same database. Findings are informational.</p></div></div>
+{% call findings("Introduced",v.introduced.as_slice()) %}{% endcall %}
+{% call findings("Resolved",v.resolved.as_slice()) %}{% endcall %}
+<details class="persisting"><summary>Persisting findings ({{ v.persisting.len() }})</summary>{% call findings("Persisting",v.persisting.as_slice()) %}{% endcall %}</details>
+{% when None %}<p class="pending-note">Package comparison complete. Vulnerability results are still pending.</p>{% endmatch %}
+{% match r.scan %}{% when Some with (scan) %}<details class="card scan-metadata"><summary>Scan metadata</summary><pre>{{ scan }}</pre></details>{% when None %}{% endmatch %}
+{% when None %}<div class="empty-state">Package results will appear here as soon as both inventories are available.</div>{% endmatch %}
+</section>

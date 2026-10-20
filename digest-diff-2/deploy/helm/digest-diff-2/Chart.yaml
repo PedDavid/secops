@@ -1,0 +1,12 @@
+apiVersion: v2
+name: digest-diff-2
+description: Rust/Axum digest comparisons on the homelab application foundation
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/PedDavid/secops
+sources:
+  - https://github.com/PedDavid/secops
+annotations:
+  org.opencontainers.image.source: https://github.com/PedDavid/secops

@@ -1,0 +1,75 @@
+nameOverride: ""
+fullnameOverride: ""
+image:
+  repository: ghcr.io/peddavid/secops/digest-diff-2
+  tag: "" # chart appVersion; release versions are immutable
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+publicUrl: https://digest-diff.example.com
+demo: false
+insecureDevAuth: false
+publicBadges: false
+scan:
+  ttl: 6h
+  timeout: 15m
+  allowedRegistries: [docker.io, registry-1.docker.io, ghcr.io, quay.io, gcr.io, mcr.microsoft.com]
+oidc:
+  issuer: ""
+  clientId: digest-diff
+  clientSecret:
+    existingSecret: ""
+    key: client-secret
+  scopes: profile email groups
+  adminClaim: groups
+  adminValue: digest-diff-admins
+  sessionTtl: 8h
+cookieKey:
+  existingSecret: "" # key cookie-key; >=64 raw bytes or base64; generated otherwise
+apiToken:
+  existingSecret: "" # for Renovate; key token; >=32 characters
+  key: token
+persistence:
+  enabled: true
+  existingClaim: ""
+  size: 10Gi
+  storageClass: null
+  keep: true
+tmpSizeLimit: 4Gi
+service:
+  type: ClusterIP
+  port: 80
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: digest-diff.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+nodeSelector:
+  kubernetes.io/arch: amd64
+  kubernetes.io/os: linux
+tolerations: []
+affinity: {}
+podAnnotations: {}
+serviceMonitor:
+  enabled: false
+  interval: 60s
+  labels: {}
+prometheusRule:
+  enabled: false
+  labels: {}
+grafanaDashboard:
+  enabled: false
+  labels:
+    grafana_dashboard: "1"

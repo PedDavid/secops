@@ -1,0 +1,29 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "digest-diff-2.fullname" . }}
+  labels:
+    {{- include "digest-diff-2.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: digest-diff-2
+      rules:
+        - alert: DigestDiffComparisonFailures
+          expr: increase(digest_diff_comparisons_failed_total{namespace={{ .Release.Namespace | quote }},service={{ printf "%s-metrics" (include "digest-diff-2.fullname" .) | quote }}}[10m]) > 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: Digest comparison failures detected
+        - alert: DigestDiffQueueBacklog
+          expr: digest_diff_scans_queued{namespace={{ .Release.Namespace | quote }},service={{ printf "%s-metrics" (include "digest-diff-2.fullname" .) | quote }}} >= 8
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Digest comparison queue remains full
+{{- end }}

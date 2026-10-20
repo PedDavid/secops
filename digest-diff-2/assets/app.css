@@ -1,0 +1,6 @@
+/* Shared Tailwind/Basecoat foundation; digest layout lives in diff.css. */
+@import "tailwindcss" source(none);
+@source "../templates";
+@source "./js";
+@import "./vendor/basecoat/basecoat-vega.css";
+@import "./themes.css";

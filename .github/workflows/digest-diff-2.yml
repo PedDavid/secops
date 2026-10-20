@@ -1,0 +1,160 @@
+name: digest-diff-2
+on:
+  pull_request:
+    paths: ['digest-diff-2/**', '.github/workflows/digest-diff-2.yml']
+  push:
+    branches: [main]
+    tags: ['digest-diff-2-v*']
+    paths: ['digest-diff-2/**', '.github/workflows/digest-diff-2.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: digest-diff-2
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: digest-diff-2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.0'
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: digest-diff-2 -> target
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+      - uses: azure/setup-helm@v4.3.0
+        with:
+          version: v3.17.3
+      - run: make helm-lint
+      - run: helm package deploy/helm/digest-diff-2 --destination dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-diff-2-chart
+          path: digest-diff-2/dist/*.tgz
+  image:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release metadata
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("digest-diff-2/Cargo.toml", "rb"))["package"]["version"])')
+          chart_app=$(sed -n 's/^appVersion: "\(.*\)"/\1/p' digest-diff-2/deploy/helm/digest-diff-2/Chart.yaml)
+          test "$version" = "$chart_app"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "${GITHUB_REF#refs/tags/digest-diff-2-v}" = "$version"
+          fi
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/digest-diff-2" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: digest-diff-2
+          platforms: linux/amd64
+          load: true
+          tags: digest-diff-2:ci
+          cache-from: type=gha,scope=digest-diff-2
+          cache-to: type=gha,mode=max,scope=digest-diff-2
+      - name: Hardened demo smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker logs digest-diff-2-ci; docker rm -f digest-diff-2-ci' EXIT
+          docker run -d --name digest-diff-2-ci --read-only \
+            --tmpfs /tmp:rw,size=4g --cap-drop ALL \
+            --security-opt no-new-privileges --memory 2g \
+            -e DIGEST_DIFF_PUBLIC_URL=http://127.0.0.1:8080 \
+            -p 127.0.0.1:8080:8080 -p 127.0.0.1:9090:9090 \
+            digest-diff-2:ci --demo
+          python3 digest-diff-2/scripts/smoke.py
+          docker rm -f digest-diff-2-ci
+          trap - EXIT
+      - name: Real public-image comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker volume create digest-diff-2-live-cache
+          trap 'docker logs digest-diff-2-live; docker rm -f digest-diff-2-live; docker volume rm digest-diff-2-live-cache' EXIT
+          docker run -d --name digest-diff-2-live --read-only \
+            --tmpfs /tmp:rw,size=4g --cap-drop ALL \
+            --security-opt no-new-privileges --memory 2g \
+            -e DIGEST_DIFF_PUBLIC_URL=http://127.0.0.1:8080 \
+            --mount type=volume,source=digest-diff-2-live-cache,target=/data \
+            -p 127.0.0.1:8080:8080 -p 127.0.0.1:9090:9090 \
+            digest-diff-2:ci --insecure-dev-auth
+          python3 digest-diff-2/scripts/smoke.py --live
+      - name: Publish development and first semantic image tags
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/digest-diff-2-v'))
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker tag digest-diff-2:ci "$IMAGE:sha-$GITHUB_SHA"
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            docker tag digest-diff-2:ci "$IMAGE:main"
+            docker push "$IMAGE:main"
+          fi
+          if docker buildx imagetools inspect "$IMAGE:$VERSION" > "$RUNNER_TEMP/version-inspect" 2>&1; then
+            echo "Semantic image $VERSION already exists; keeping it immutable."
+          elif grep -Eiq 'not found|manifest unknown|404|name_unknown' "$RUNNER_TEMP/version-inspect"; then
+            docker tag digest-diff-2:ci "$IMAGE:$VERSION"
+            docker push "$IMAGE:$VERSION"
+          else
+            cat "$RUNNER_TEMP/version-inspect"
+            exit 1
+          fi
+  chart:
+    needs: image
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/digest-diff-2-v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4.3.0
+        with:
+          version: v3.17.3
+      - name: Login to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Publish chart version once
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(awk '/^version:/{print $2}' digest-diff-2/deploy/helm/digest-diff-2/Chart.yaml)
+          repo="oci://ghcr.io/${GITHUB_REPOSITORY,,}/charts"
+          if helm show chart "$repo/digest-diff-2" --version "$version" > "$RUNNER_TEMP/chart-inspect" 2>&1; then
+            echo "Chart $version already exists; keeping it immutable."
+          elif grep -Eiq 'not found|manifest unknown|404|name_unknown' "$RUNNER_TEMP/chart-inspect"; then
+            helm package digest-diff-2/deploy/helm/digest-diff-2 --destination dist
+            helm push "dist/digest-diff-2-$version.tgz" "$repo"
+          else
+            cat "$RUNNER_TEMP/chart-inspect"
+            exit 1
+          fi

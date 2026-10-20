@@ -1,0 +1,14 @@
+digest-diff-2 is installed in {{ .Release.Namespace }}.
+
+UI Service: {{ include "digest-diff-2.fullname" . }}:{{ .Values.service.port }}
+Operations Service (cluster-only): {{ include "digest-diff-2.fullname" . }}-metrics:9090
+
+Inspect readiness:
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "digest-diff-2.fullname" . }}
+
+Forward the UI:
+  kubectl -n {{ .Release.Namespace }} port-forward service/{{ include "digest-diff-2.fullname" . }} 8080:{{ .Values.service.port }}
+
+OIDC callback: {{ trimSuffix "/" .Values.publicUrl }}/auth/callback
+Keep the metrics Service internal. Configure Renovate with the API token Secret.
+{{ if .Values.persistence.keep }}The cache/database PVC is retained on uninstall.{{ end }}

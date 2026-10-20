@@ -1,0 +1,10 @@
+target
+data
+dist
+.git
+docs
+deploy
+tests
+scripts
+README.md
+Makefile
